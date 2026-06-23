@@ -60,12 +60,22 @@ export const productsApi = {
     const qs = new URLSearchParams(
       Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v))
     ).toString();
-    return req<Product[]>(`${URLS.products}${qs ? '?' + qs : ''}`, { headers: authHeaders() });
+    return req<Product[]>(`${URLS.products}${qs ? '?' + qs : ''}`);
   },
   create: (data: Partial<Product>) =>
     req<{ id: number }>(`${URLS.products}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) }),
   update: (data: Partial<Product> & { id: number }) =>
     req<{ ok: boolean }>(`${URLS.products}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+  remove: (id: number) =>
+    req<{ ok: boolean }>(`${URLS.products}`, { method: 'DELETE', headers: authHeaders(), body: JSON.stringify({ id }) }),
+  uploadPhoto: (data: string, mime: string) =>
+    req<{ url: string; key: string }>(`${URLS.products}?action=upload-photo`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ data, mime }),
+    }),
+  csvImport: (csv: string) =>
+    req<{ imported: number; errors: string[] }>(`${URLS.products}?action=csv-import`, {
+      method: 'POST', headers: authHeaders(), body: JSON.stringify({ csv }),
+    }),
 };
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
@@ -149,6 +159,9 @@ export interface Product {
   specs: string[];
   description: string;
   files_count: number;
+  photos: string[];
+  complectation: string[];
+  certs: string[];
   created_at: string;
   updated_at: string;
 }
