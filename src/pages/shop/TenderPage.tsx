@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import ShopLayout from '@/components/shop/ShopLayout';
+import { submitLead } from '@/lib/leadsApi';
 
 const STEPS = [
   { icon: 'Search', title: 'Мониторинг тендеров', desc: 'Отслеживаем закупки на zakupki.gov.ru, ЕИС и всех крупных ЭТП ежедневно.' },
@@ -21,9 +22,27 @@ const LAWS = [
 
 export default function TenderPage() {
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', org: '', inn: '', phone: '', email: '', tender_num: '', equipment: '' });
 
-  const handleSubmit = (e: FormEvent) => { e.preventDefault(); setSent(true); };
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await submitLead({
+        type: 'tender',
+        contact: form.name,
+        org: form.org,
+        inn: form.inn,
+        phone: form.phone,
+        email: form.email,
+        comment: [form.tender_num && `Тендер: ${form.tender_num}`, form.equipment].filter(Boolean).join('\n'),
+      });
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ShopLayout>
@@ -122,8 +141,9 @@ export default function TenderPage() {
                 <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email *" type="email" className="rounded-xl" required />
                 <Input value={form.tender_num} onChange={e => setForm(f => ({ ...f, tender_num: e.target.value }))} placeholder="Номер тендера на zakupki.gov.ru" className="rounded-xl" />
                 <Textarea value={form.equipment} onChange={e => setForm(f => ({ ...f, equipment: e.target.value }))} placeholder="Перечень оборудования или описание закупки" className="rounded-xl" rows={4} />
-                <Button type="submit" className="w-full rounded-xl font-semibold h-11">
-                  <Icon name="Send" size={16} className="mr-2" /> Отправить заявку
+                <Button type="submit" disabled={loading} className="w-full rounded-xl font-semibold h-11">
+                  <Icon name={loading ? 'Loader2' : 'Send'} size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Отправляем…' : 'Отправить заявку'}
                 </Button>
               </form>
             )}

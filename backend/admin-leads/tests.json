@@ -1,7 +1,25 @@
 {
   "tests": [
     {
-      "name": "Get leads without auth",
+      "name": "Submit KP lead (public, no auth)",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "type": "kp",
+        "contact": "Тест Тестов",
+        "org": "ООО Тест",
+        "phone": "+79001234567",
+        "email": "test@test.ru",
+        "inn": "1234567890",
+        "comment": "Тестовый запрос КП",
+        "product": "ЛОР-комбайн универсальный"
+      },
+      "expectedStatus": 201,
+      "expectedBody": {"id": 1},
+      "bodyMatcher": "exists"
+    },
+    {
+      "name": "Get leads without auth — 403",
       "method": "GET",
       "path": "/",
       "expectedStatus": 403

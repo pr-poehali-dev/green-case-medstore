@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import ShopLayout from '@/components/shop/ShopLayout';
+import { submitLead } from '@/lib/leadsApi';
 
 const CONTACTS = [
   { icon: 'Phone', label: 'Телефон', val: '+7 495 000-00-00', href: 'tel:+74950000000' },
@@ -23,9 +24,26 @@ const DEPARTMENTS = [
 
 export default function ContactsPage() {
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', email: '', org: '', comment: '' });
 
-  const handleSubmit = (e: FormEvent) => { e.preventDefault(); setSent(true); };
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await submitLead({
+        type: 'contact',
+        contact: form.name,
+        org: form.org,
+        phone: form.phone,
+        email: form.email,
+        comment: form.comment,
+      });
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ShopLayout>
@@ -79,8 +97,9 @@ export default function ContactsPage() {
                 <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email" type="email" className="rounded-xl" />
                 <Input value={form.org} onChange={e => setForm(f => ({ ...f, org: e.target.value }))} placeholder="Организация" className="rounded-xl" />
                 <Textarea value={form.comment} onChange={e => setForm(f => ({ ...f, comment: e.target.value }))} placeholder="Вопрос или комментарий" className="rounded-xl" rows={4} />
-                <Button type="submit" className="w-full rounded-xl font-semibold h-11">
-                  <Icon name="Send" size={16} className="mr-2" /> Отправить сообщение
+                <Button type="submit" disabled={loading} className="w-full rounded-xl font-semibold h-11">
+                  <Icon name={loading ? 'Loader2' : 'Send'} size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Отправляем…' : 'Отправить сообщение'}
                 </Button>
               </form>
             )}

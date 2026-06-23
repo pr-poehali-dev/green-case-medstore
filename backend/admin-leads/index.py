@@ -1,5 +1,7 @@
 """
-CRUD для заявок (leads). Доступно: admin, manager.
+CRUD для заявок (leads).
+POST / — публичная форма, без авторизации.
+GET, PUT, POST /history — только admin/manager.
 """
 import json
 import os
@@ -39,8 +41,8 @@ def row_to_lead(row):
         'id': row[0], 'type': row[1], 'org': row[2], 'contact': row[3],
         'phone': row[4], 'email': row[5] or '', 'inn': row[6] or '',
         'amount': row[7], 'status': row[8], 'manager': row[9] or '',
-        'comment': row[10] or '',
-        'created_at': str(row[11]), 'updated_at': str(row[12]),
+        'comment': row[10] or '', 'product': row[11] or '',
+        'created_at': str(row[12]), 'updated_at': str(row[13]),
     }
 
 
@@ -51,6 +53,33 @@ def handler(event: dict, context) -> dict:
     method = event.get('httpMethod', 'GET')
     path = event.get('path', '')
     conn = get_conn()
+
+    # POST / — публичная форма отправки заявки (без авторизации)
+    if method == 'POST' and 'history' not in path:
+        body = json.loads(event.get('body') or '{}')
+        cur = conn.cursor()
+        cur.execute(
+            f"""INSERT INTO {SCHEMA}.leads
+                    (type, org, contact, phone, email, inn, comment, product, amount, status, manager)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,0,'new','')
+                RETURNING id""",
+            (
+                body.get('type', 'kp'),
+                body.get('org', ''),
+                body.get('contact', ''),
+                body.get('phone', ''),
+                body.get('email', ''),
+                body.get('inn', ''),
+                body.get('comment', ''),
+                body.get('product', ''),
+            )
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+        return {'statusCode': 201, 'headers': CORS, 'body': json.dumps({'id': new_id})}
+
+    # Все остальные методы — только admin/manager
     user = get_user(event, conn)
     if not user or user['role'] not in ('admin', 'manager'):
         conn.close()
@@ -86,28 +115,12 @@ def handler(event: dict, context) -> dict:
     if method == 'GET':
         cur = conn.cursor()
         cur.execute(
-            f"""SELECT id,type,org,contact,phone,email,inn,amount,status,manager,comment,created_at,updated_at
+            f"""SELECT id,type,org,contact,phone,email,inn,amount,status,manager,comment,product,created_at,updated_at
                 FROM {SCHEMA}.leads ORDER BY created_at DESC"""
         )
         rows = cur.fetchall()
         conn.close()
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps([row_to_lead(r) for r in rows], ensure_ascii=False)}
-
-    # POST — создать заявку (публичная форма)
-    if method == 'POST':
-        body = json.loads(event.get('body') or '{}')
-        cur = conn.cursor()
-        cur.execute(
-            f"""INSERT INTO {SCHEMA}.leads (type,org,contact,phone,email,inn,amount,status,manager)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,'new','') RETURNING id""",
-            (body.get('type','kp'), body.get('org',''), body.get('contact',''),
-             body.get('phone',''), body.get('email',''), body.get('inn',''),
-             body.get('amount', 0))
-        )
-        new_id = cur.fetchone()[0]
-        conn.commit()
-        conn.close()
-        return {'statusCode': 201, 'headers': CORS, 'body': json.dumps({'id': new_id})}
 
     # PUT — обновить статус / менеджера
     if method == 'PUT':

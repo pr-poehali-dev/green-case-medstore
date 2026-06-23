@@ -137,11 +137,12 @@ export default function Leads() {
               </button>
             </div>
 
-            <div className="space-y-2 mb-6">
+            <div className="space-y-2 mb-4">
               {[
                 { icon: 'User', label: 'Контакт', val: selected.contact },
                 { icon: 'Phone', label: 'Телефон', val: selected.phone },
                 { icon: 'Mail', label: 'Email', val: selected.email || '—' },
+                { icon: 'Hash', label: 'ИНН', val: selected.inn || '—' },
                 { icon: 'Wallet', label: 'Сумма', val: fmtMoney(selected.amount) },
                 { icon: 'Briefcase', label: 'Менеджер', val: selected.manager || 'Не назначен' },
               ].map(row => (
@@ -152,6 +153,20 @@ export default function Leads() {
                 </div>
               ))}
             </div>
+
+            {selected.product && (
+              <div className="mb-4 rounded-xl bg-primary/8 border border-primary/20 px-3 py-2.5">
+                <div className="text-xs text-muted-foreground mb-1">Позиция / товар</div>
+                <div className="text-sm font-semibold">{selected.product}</div>
+              </div>
+            )}
+
+            {selected.comment && (
+              <div className="mb-6 rounded-xl bg-secondary px-3 py-2.5">
+                <div className="text-xs text-muted-foreground mb-1">Комментарий клиента</div>
+                <div className="text-sm whitespace-pre-wrap">{selected.comment}</div>
+              </div>
+            )}
 
             {/* Status */}
             <div className="mb-6">

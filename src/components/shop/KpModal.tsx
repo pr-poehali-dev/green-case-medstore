@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import Icon from '@/components/ui/icon';
+import { submitLead } from '@/lib/leadsApi';
 
 interface Props {
   open: boolean;
@@ -12,12 +13,31 @@ interface Props {
 
 export default function KpModal({ open, onClose, productName }: Props) {
   const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', org: '', inn: '', phone: '', email: '', comment: '' });
 
   if (!open) return null;
 
-  const handleSubmit = (e: FormEvent) => { e.preventDefault(); setSent(true); };
-  const handleClose = () => { setSent(false); onClose(); };
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await submitLead({
+        type: 'kp',
+        contact: form.name,
+        org: form.org,
+        inn: form.inn,
+        phone: form.phone,
+        email: form.email,
+        comment: form.comment,
+        product: productName || '',
+      });
+      setSent(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleClose = () => { setSent(false); setForm({ name: '', org: '', inn: '', phone: '', email: '', comment: '' }); onClose(); };
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -51,8 +71,9 @@ export default function KpModal({ open, onClose, productName }: Props) {
               </div>
               <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email *" type="email" className="rounded-xl" required />
               <Textarea value={form.comment} onChange={e => setForm(f => ({ ...f, comment: e.target.value }))} placeholder="Комментарий, количество, ТЗ" className="rounded-xl" rows={3} />
-              <Button type="submit" className="w-full rounded-xl font-semibold h-11">
-                <Icon name="Send" size={16} className="mr-2" /> Отправить запрос
+              <Button type="submit" disabled={loading} className="w-full rounded-xl font-semibold h-11">
+                <Icon name={loading ? 'Loader2' : 'Send'} size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Отправляем…' : 'Отправить запрос'}
               </Button>
             </form>
           </>

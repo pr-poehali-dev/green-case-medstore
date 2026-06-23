@@ -168,7 +168,7 @@ export interface Product {
 
 export interface Lead {
   id: number;
-  type: 'kp' | 'tender' | 'consult';
+  type: 'kp' | 'tender' | 'consult' | 'contact';
   org: string;
   contact: string;
   phone: string;
@@ -178,6 +178,7 @@ export interface Lead {
   status: 'new' | 'in_work' | 'kp_sent' | 'approval' | 'payment' | 'shipment' | 'closed';
   manager: string;
   comment: string;
+  product: string;
   created_at: string;
 }
 

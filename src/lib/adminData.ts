@@ -24,11 +24,12 @@ export const PRODUCT_STATUS: Record<ProductStatus, { label: string; color: strin
   discontinued: { label: 'Снят с производства', color: 'bg-rose-100 text-rose-700',    dot: 'bg-rose-500' },
 };
 
-export type LeadType = 'kp' | 'tender' | 'consult';
+export type LeadType = 'kp' | 'tender' | 'consult' | 'contact';
 export const LEAD_TYPE: Record<LeadType, { label: string; icon: string; color: string }> = {
   kp:      { label: 'Запрос КП',    icon: 'FileText',      color: 'bg-primary/10 text-primary' },
   tender:  { label: 'Тендер',       icon: 'Gavel',         color: 'bg-blue-100 text-blue-700' },
   consult: { label: 'Консультация', icon: 'MessageCircle', color: 'bg-purple-100 text-purple-700' },
+  contact: { label: 'Обращение',    icon: 'Mail',          color: 'bg-slate-100 text-slate-700' },
 };
 
 export type LeadStatus = 'new' | 'in_work' | 'kp_sent' | 'approval' | 'payment' | 'shipment' | 'closed';
