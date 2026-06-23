@@ -1,0 +1,10 @@
+{
+  "tests": [
+    {
+      "name": "GET root returns 404",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 404
+    }
+  ]
+}

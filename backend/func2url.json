@@ -1,0 +1,8 @@
+{
+  "admin-seed": "https://functions.poehali.dev/5087f927-d8c0-48b7-a86c-da2a53c68874",
+  "admin-clients": "https://functions.poehali.dev/f0d2afab-ac86-410b-812b-106a07a3e668",
+  "admin-leads": "https://functions.poehali.dev/58fcd52d-0bc7-48b8-9bc2-3f674b8c7ddc",
+  "admin-content": "https://functions.poehali.dev/268f72e1-4cfb-4312-8aae-8c7313536c77",
+  "admin-products": "https://functions.poehali.dev/227d3485-38c9-4c9d-8327-eb262652830d",
+  "admin-auth": "https://functions.poehali.dev/296e2b1f-8de8-4016-95b9-627cec7fc0b1"
+}
