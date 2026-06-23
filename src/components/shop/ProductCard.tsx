@@ -21,13 +21,12 @@ export default function ProductCard({ product: p, inCompare, onCompare, onKp, an
       className="group flex flex-col rounded-2xl border border-border bg-white overflow-hidden hover-lift animate-float-up shadow-sm"
       style={{ animationDelay: `${animationDelay}s` }}
     >
-      {/* Photo area — белый фон, фото по центру с padding */}
-      <div className="relative bg-white px-4 pt-5 pb-2 flex items-center justify-center" style={{ minHeight: 200 }}>
+      {/* Photo area — серый фон, фото на всю зону */}
+      <div className="relative overflow-hidden" style={{ height: 220, background: '#f7f8f9' }}>
         <img
           src={thumb}
           alt={p.name}
-          className="w-full object-contain group-hover:scale-105 transition-transform duration-500"
-          style={{ maxHeight: 180 }}
+          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
 
         {/* Status badge */}
@@ -55,9 +54,6 @@ export default function ProductCard({ product: p, inCompare, onCompare, onKp, an
           </button>
         )}
       </div>
-
-      {/* Divider */}
-      <div className="h-px bg-border mx-0" />
 
       {/* Info */}
       <div className="flex flex-col flex-1 px-4 pt-4 pb-4">
