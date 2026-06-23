@@ -13,6 +13,8 @@ import Catalog from "./pages/admin/Catalog";
 import Leads from "./pages/admin/Leads";
 import Clients from "./pages/admin/Clients";
 import Content from "./pages/admin/Content";
+import Users from "./pages/admin/Users";
+import Profile from "./pages/admin/Profile";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,8 @@ const App = () => (
             <Route path="/admin/leads" element={<Leads />} />
             <Route path="/admin/clients" element={<Clients />} />
             <Route path="/admin/content" element={<Content />} />
+            <Route path="/admin/users" element={<Users />} />
+            <Route path="/admin/profile" element={<Profile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

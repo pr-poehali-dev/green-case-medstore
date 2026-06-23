@@ -8,7 +8,7 @@ import Icon from '@/components/ui/icon';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@greencase.ru');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,7 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email.trim().toLowerCase(), password);
       navigate('/admin');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Ошибка входа');
@@ -38,16 +38,18 @@ export default function Login() {
           </div>
           <div className="leading-tight">
             <div className="font-display text-xl font-bold">Зеленый чемодан</div>
-            <div className="font-mono-tech text-xs text-muted-foreground">ADMIN PANEL</div>
+            <div className="font-mono-tech text-xs text-muted-foreground">ПАНЕЛЬ УПРАВЛЕНИЯ</div>
           </div>
         </div>
 
         {/* Card */}
         <div className="glass rounded-3xl border border-border p-8 glow-green">
           <h1 className="font-display text-2xl font-bold mb-1">Вход в систему</h1>
-          <p className="text-sm text-muted-foreground mb-6">Введите email и пароль для доступа к панели управления</p>
+          <p className="text-sm text-muted-foreground mb-6">
+            Введите корпоративный email и пароль
+          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
               <label className="text-sm font-semibold mb-1.5 block">Email</label>
               <div className="relative">
@@ -56,8 +58,9 @@ export default function Login() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  placeholder="admin@greencase.ru"
+                  placeholder="your@greencase.ru"
                   className="pl-9 rounded-xl"
+                  autoComplete="username"
                   required
                 />
               </div>
@@ -73,6 +76,7 @@ export default function Login() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="pl-9 pr-10 rounded-xl"
+                  autoComplete="current-password"
                   required
                 />
                 <button
@@ -87,31 +91,27 @@ export default function Login() {
 
             {error && (
               <div className="flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 px-3 py-2.5 text-sm text-rose-700">
-                <Icon name="AlertCircle" size={16} />
-                {error}
+                <Icon name="AlertCircle" size={16} className="shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
-            <Button type="submit" className="w-full rounded-xl h-12 font-semibold text-base" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full rounded-xl h-12 font-semibold text-base"
+              disabled={loading || !email || !password}
+            >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <Icon name="Loader2" size={18} className="animate-spin" /> Входим…
+                  <Icon name="Loader2" size={18} className="animate-spin" /> Проверка…
                 </span>
               ) : 'Войти в панель'}
             </Button>
           </form>
-
-          <div className="mt-6 rounded-2xl bg-secondary px-4 py-3">
-            <div className="text-xs font-semibold text-muted-foreground mb-1.5">Демо-доступ</div>
-            <div className="font-mono-tech text-xs space-y-0.5">
-              <div><span className="text-muted-foreground">email:</span> admin@greencase.ru</div>
-              <div><span className="text-muted-foreground">пароль:</span> Admin123!</div>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
-          © 2026 Зеленый чемодан · Все данные защищены
+          © {new Date().getFullYear()} Зеленый чемодан · Все данные защищены
         </p>
       </div>
     </div>

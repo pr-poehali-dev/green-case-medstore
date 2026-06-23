@@ -1,16 +1,21 @@
 """
-Авторизация администраторов: login, logout, me, seed.
+Авторизация: login, logout, me, change-password.
+Безопасность: bcrypt, brute-force защита (5 попыток → блокировка 15 мин),
+токен 96 hex символов, срок жизни сессии 30 дней.
 """
 import json
 import os
 import secrets
-import hashlib
+import bcrypt
 import psycopg2
 
 SCHEMA = os.environ.get('MAIN_DB_SCHEMA', 't_p61771184_green_case_medstore')
+MAX_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
+
 CORS = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Authorization',
 }
 
@@ -19,180 +24,195 @@ def get_conn():
     return psycopg2.connect(os.environ['DATABASE_URL'])
 
 
-def hash_password(password: str) -> str:
-    """SHA-256 хэш пароля (простая схема без bcrypt)."""
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def get_token(event: dict) -> str:
-    auth = event.get('headers', {}).get('X-Authorization', '') or \
-           event.get('headers', {}).get('Authorization', '')
+def extract_token(event: dict) -> str:
+    auth = (event.get('headers') or {}).get('X-Authorization', '') or \
+           (event.get('headers') or {}).get('Authorization', '')
     return auth.replace('Bearer ', '').strip()
+
+
+def get_session_user(cur, token: str):
+    """Возвращает dict пользователя по токену или None."""
+    if not token:
+        return None
+    cur.execute(
+        f"""SELECT u.id, u.name, u.email, u.role
+            FROM {SCHEMA}.sessions s
+            JOIN {SCHEMA}.users u ON u.id = s.user_id
+            WHERE s.token = %s AND s.expires_at > NOW() AND u.is_active = true""",
+        (token,)
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+    return {'id': row[0], 'name': row[1], 'email': row[2], 'role': row[3]}
+
+
+def check_password(plain: str, hashed: str) -> bool:
+    """Поддерживает как bcrypt, так и legacy SHA-256 хэши."""
+    if hashed.startswith('$2b$') or hashed.startswith('$2a$'):
+        try:
+            return bcrypt.checkpw(plain.encode(), hashed.encode())
+        except Exception:
+            return False
+    import hashlib
+    return hashlib.sha256(plain.encode()).hexdigest() == hashed
+
+
+def hash_password(plain: str) -> str:
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
+
+
+def respond(status: int, body: dict) -> dict:
+    return {'statusCode': status, 'headers': CORS, 'body': json.dumps(body, ensure_ascii=False)}
 
 
 def handler(event: dict, context) -> dict:
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
-    path = event.get('path', '').rstrip('/')
+    path = (event.get('path') or '').rstrip('/')
     method = event.get('httpMethod', 'GET')
 
-    # POST /login
+    # ── POST /login ──────────────────────────────────────────────────────────
     if method == 'POST' and path.endswith('/login'):
         body = json.loads(event.get('body') or '{}')
-        email = body.get('email', '').strip().lower()
-        password = body.get('password', '')
-        if not email or not password:
-            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'email и пароль обязательны'})}
+        email = (body.get('email') or '').strip().lower()
+        password = body.get('password') or ''
 
-        pw_hash = hash_password(password)
+        if not email or not password:
+            return respond(400, {'error': 'Email и пароль обязательны'})
+
         conn = get_conn()
         cur = conn.cursor()
+
         cur.execute(
-            f"SELECT id, name, email, role FROM {SCHEMA}.users WHERE email=%s AND password_hash=%s AND is_active=true",
-            (email, pw_hash)
+            f"""SELECT id, name, email, role, password_hash, is_active,
+                       failed_attempts, locked_until
+                FROM {SCHEMA}.users WHERE email = %s""",
+            (email,)
         )
         row = cur.fetchone()
+
         if not row:
             conn.close()
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Неверный email или пароль'})}
+            return respond(401, {'error': 'Неверный email или пароль'})
 
-        user_id, name, user_email, role = row
+        uid, name, u_email, role, pw_hash, is_active, failed, locked_until = row
+
+        if not is_active:
+            conn.close()
+            return respond(403, {'error': 'Аккаунт деактивирован. Обратитесь к администратору'})
+
+        # Проверка блокировки
+        if locked_until:
+            cur.execute(f"SELECT locked_until > NOW() FROM {SCHEMA}.users WHERE id = %s", (uid,))
+            still_locked = cur.fetchone()[0]
+            if still_locked:
+                conn.close()
+                return respond(429, {'error': f'Аккаунт заблокирован из-за многократных неудачных попыток входа. Попробуйте через {LOCKOUT_MINUTES} минут'})
+            else:
+                cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=0, locked_until=NULL WHERE id=%s", (uid,))
+
+        # Проверка пароля
+        if not check_password(password, pw_hash):
+            new_attempts = (failed or 0) + 1
+            if new_attempts >= MAX_ATTEMPTS:
+                cur.execute(
+                    f"UPDATE {SCHEMA}.users SET failed_attempts=%s, locked_until=NOW()+INTERVAL '{LOCKOUT_MINUTES} minutes' WHERE id=%s",
+                    (new_attempts, uid)
+                )
+                conn.commit()
+                conn.close()
+                return respond(429, {'error': f'Слишком много неудачных попыток. Аккаунт заблокирован на {LOCKOUT_MINUTES} минут'})
+            else:
+                cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=%s WHERE id=%s", (new_attempts, uid))
+                conn.commit()
+                conn.close()
+                remaining = MAX_ATTEMPTS - new_attempts
+                return respond(401, {'error': f'Неверный email или пароль. Осталось попыток: {remaining}'})
+
+        # Успешный вход
         token = secrets.token_hex(48)
+        ip = (event.get('requestContext') or {}).get('identity', {}).get('sourceIp', '')
+        ua = (event.get('headers') or {}).get('User-Agent', '')[:512]
+
         cur.execute(
-            f"INSERT INTO {SCHEMA}.sessions (user_id, token) VALUES (%s, %s)",
-            (user_id, token)
+            f"INSERT INTO {SCHEMA}.sessions (user_id, token, ip_address, user_agent) VALUES (%s, %s, %s, %s)",
+            (uid, token, ip, ua)
         )
+        cur.execute(
+            f"UPDATE {SCHEMA}.users SET failed_attempts=0, locked_until=NULL, last_login=NOW() WHERE id=%s",
+            (uid,)
+        )
+        # Если пароль ещё SHA-256 — обновим до bcrypt
+        if not (pw_hash.startswith('$2b$') or pw_hash.startswith('$2a$')):
+            new_hash = hash_password(password)
+            cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (new_hash, uid))
+
         conn.commit()
         conn.close()
-        return {
-            'statusCode': 200,
-            'headers': CORS,
-            'body': json.dumps({'token': token, 'user': {'id': user_id, 'name': name, 'email': user_email, 'role': role}})
-        }
+        return respond(200, {
+            'token': token,
+            'user': {'id': uid, 'name': name, 'email': u_email, 'role': role}
+        })
 
-    # POST /logout
+    # ── POST /logout ──────────────────────────────────────────────────────────
     if method == 'POST' and path.endswith('/logout'):
-        token = get_token(event)
+        token = extract_token(event)
         if token:
             conn = get_conn()
             cur = conn.cursor()
             cur.execute(f"UPDATE {SCHEMA}.sessions SET expires_at=NOW() WHERE token=%s", (token,))
             conn.commit()
             conn.close()
-        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+        return respond(200, {'ok': True})
 
-    # GET /me
+    # ── GET /me ───────────────────────────────────────────────────────────────
     if method == 'GET' and path.endswith('/me'):
-        token = get_token(event)
+        token = extract_token(event)
         if not token:
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Не авторизован'})}
+            return respond(401, {'error': 'Не авторизован'})
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute(
-            f"""SELECT u.id, u.name, u.email, u.role
-                FROM {SCHEMA}.sessions s
-                JOIN {SCHEMA}.users u ON u.id = s.user_id
-                WHERE s.token=%s AND s.expires_at > NOW() AND u.is_active=true""",
-            (token,)
-        )
-        row = cur.fetchone()
+        user = get_session_user(cur, token)
         conn.close()
-        if not row:
-            return {'statusCode': 401, 'headers': CORS, 'body': json.dumps({'error': 'Сессия истекла'})}
-        uid, name, email, role = row
-        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'id': uid, 'name': name, 'email': email, 'role': role})}
+        if not user:
+            return respond(401, {'error': 'Сессия истекла или недействительна'})
+        return respond(200, user)
 
-    # POST /seed — заполнить БД тестовыми данными (только admin)
-    if method == 'POST' and path.endswith('/seed'):
-        token = get_token(event)
+    # ── PUT /change-password ──────────────────────────────────────────────────
+    if method == 'PUT' and path.endswith('/change-password'):
+        token = extract_token(event)
+        if not token:
+            return respond(401, {'error': 'Не авторизован'})
+        body = json.loads(event.get('body') or '{}')
+        old_pw = body.get('old_password') or ''
+        new_pw = body.get('new_password') or ''
+
+        if not old_pw or not new_pw:
+            return respond(400, {'error': 'Укажите старый и новый пароль'})
+        if len(new_pw) < 8:
+            return respond(400, {'error': 'Новый пароль должен содержать минимум 8 символов'})
+
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute(
-            f"""SELECT u.role FROM {SCHEMA}.sessions s
-                JOIN {SCHEMA}.users u ON u.id=s.user_id
-                WHERE s.token=%s AND s.expires_at>NOW()""", (token,)
-        )
-        row = cur.fetchone()
-        if not row or row[0] != 'admin':
+        user = get_session_user(cur, token)
+        if not user:
             conn.close()
-            return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Только для администратора'})}
+            return respond(401, {'error': 'Не авторизован'})
 
-        # Seed admin user if not exists
-        admin_hash = hash_password('Admin123!')
-        cur.execute(
-            f"INSERT INTO {SCHEMA}.users (name,email,password_hash,role) VALUES (%s,%s,%s,'admin') ON CONFLICT (email) DO NOTHING",
-            ('Алексей Козлов', 'admin@greencase.ru', admin_hash)
-        )
+        cur.execute(f"SELECT password_hash FROM {SCHEMA}.users WHERE id=%s", (user['id'],))
+        pw_hash = cur.fetchone()[0]
+        if not check_password(old_pw, pw_hash):
+            conn.close()
+            return respond(400, {'error': 'Текущий пароль введён неверно'})
 
-        # Seed products
-        products = [
-            ('Эндоскопическая видеосистема Full HD','Видеосистема медицинская','Видеосистемы','MedTech Optix','РЗН 2023/19847','12.2028','in_stock','["4K UHD сенсор","NBI-режим","Глубина 1.5–100 мм"]'),
-            ('Кольпоскоп оптический бинокулярный','Кольпоскоп КС-01','Гинекология','GynoVision','РЗН 2022/16204','06.2027','order','["Увеличение ×4–×25","LED 50 000 ч","Зелёный фильтр"]'),
-            ('Аппарат электрохирургический ЭХВЧ','Коагулятор ЭХ-400','Электрохирургия','ElectroSurg','РЗН 2023/18091','09.2028','in_stock','["Мощность 400 Вт","Аргон-режим","Биполяр LigaSure"]'),
-            ('Рентген-аппарат мобильный цифровой','Рентген РМ-Digital','Рентген аппараты','RadioPro','РЗН 2021/14730','03.2026','order','["Детектор 35×43 см","Доза −40%","Мобильная С-дуга"]'),
-            ('Лазер косметологический фракционный','Лазер дерматологический','Косметология','DermaLaser','РЗН 2020/12033','01.2025','discontinued','["Длина волны 1550 нм","Мощность 30 Вт","3 насадки"]'),
-            ('ЛОР-комбайн универсальный','Комплекс ЛОР-хирургический','Отоларингология','ENT Systems','РЗН 2023/17720','11.2028','in_stock','["5 функциональных модулей","Встроенный отоскоп","Видеоэндоскопия"]'),
-        ]
-        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.products")
-        if cur.fetchone()[0] == 0:
-            for p in products:
-                cur.execute(
-                    f"INSERT INTO {SCHEMA}.products (name,reg_name,category,brand,ru_number,ru_valid,status,specs) VALUES (%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
-                    p
-                )
-
-        # Seed leads
-        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.leads")
-        if cur.fetchone()[0] == 0:
-            leads = [
-                ('kp','ГКБ №1 им. Пирогова','Иванова Е.А.','+7 495 111-22-33',2400000,'new',''),
-                ('tender','Клиника «МедСтандарт»','Петров С.В.','+7 812 444-55-66',5800000,'in_work','Смирнов А.'),
-                ('consult','ООО «ДентаЛюкс»','Сидорова М.И.','+7 495 777-88-99',0,'kp_sent','Козлова Н.'),
-                ('kp','Областная больница №4','Морозов Д.К.','+7 343 222-33-44',1150000,'approval','Смирнов А.'),
-                ('tender','НИИ кардиологии','Волкова О.П.','+7 495 333-44-55',9200000,'payment','Козлова Н.'),
-                ('kp','Медцентр «Здоровье+»','Зайцев Р.А.','+7 861 555-66-77',760000,'shipment','Смирнов А.'),
-                ('consult','Санаторий «Сосны»','Белов И.Н.','+7 499 888-99-00',430000,'closed','Козлова Н.'),
-            ]
-            for l in leads:
-                cur.execute(
-                    f"INSERT INTO {SCHEMA}.leads (type,org,contact,phone,amount,status,manager) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    l
-                )
-
-        # Seed clients
-        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.clients")
-        if cur.fetchone()[0] == 0:
-            clients = [
-                ('ГКБ №1 им. Пирогова','7701234567','770101001','state',7,12,28400000),
-                ('Клиника «МедСтандарт»','7809876543','780901001','private',5,8,15600000),
-                ('ООО «ДентаЛюкс»','7712398745','771201001','private',0,3,2300000),
-                ('Областная больница №4','6634567890','663401001','state',10,6,9800000),
-                ('НИИ кардиологии','7745612398','774501001','state',12,15,41200000),
-            ]
-            for c in clients:
-                cur.execute(
-                    f"INSERT INTO {SCHEMA}.clients (name,inn,kpp,type,discount,deals_count,total_amount) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                    c
-                )
-
-        # Seed articles
-        cur.execute(f"SELECT COUNT(*) FROM {SCHEMA}.articles")
-        if cur.fetchone()[0] == 0:
-            arts = [
-                ('Как выбрать эндоскопическую стойку для клиники','Статья','Опубликовано','Козлова Н.'),
-                ('Новые поступления: рентген-аппараты 2026','Новость','Опубликовано','Козлова Н.'),
-                ('Лицензия Росздравнадзора №ФС-2026-1142','Документ','Опубликовано','Admin'),
-                ('Обзор трендов medtech на 2026 год','Статья','Черновик','Козлова Н.'),
-            ]
-            for a in arts:
-                cur.execute(
-                    f"INSERT INTO {SCHEMA}.articles (title,type,status,author) VALUES (%s,%s,%s,%s)",
-                    a
-                )
-
+        new_hash = hash_password(new_pw)
+        cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (new_hash, user['id']))
+        # Инвалидируем все остальные сессии
+        cur.execute(f"UPDATE {SCHEMA}.sessions SET expires_at=NOW() WHERE user_id=%s AND token!=%s", (user['id'], token))
         conn.commit()
         conn.close()
-        return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'message': 'Данные загружены'})}
+        return respond(200, {'ok': True, 'message': 'Пароль успешно изменён'})
 
-    return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Not found'})}
+    return respond(404, {'error': 'Not found'})
