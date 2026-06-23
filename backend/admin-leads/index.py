@@ -81,7 +81,7 @@ def handler(event: dict, context) -> dict:
 
     # Все остальные методы — только admin/manager
     user = get_user(event, conn)
-    if not user or user['role'] not in ('admin', 'manager'):
+    if not user or user['role'] not in ('admin', 'manager', 'developer'):
         conn.close()
         return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
 
