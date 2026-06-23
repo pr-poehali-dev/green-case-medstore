@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import Icon from '@/components/ui/icon';
 import ShopLayout from '@/components/shop/ShopLayout';
 import KpModal from '@/components/shop/KpModal';
-import { CATEGORIES, ADVANTAGES, HERO_IMG } from '@/data/shop';
+import ProductCard from '@/components/shop/ProductCard';
+import { CATEGORIES, ADVANTAGES } from '@/data/shop';
 import { productsApi, Product } from '@/lib/api';
 
 export default function Index() {
@@ -173,73 +174,27 @@ export default function Index() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {apiProducts.length === 0
             ? [...Array(4)].map((_, i) => (
-                <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden">
-                  <div className="aspect-square bg-muted animate-pulse" />
-                  <div className="p-5 space-y-3">
-                    <div className="h-4 bg-muted rounded animate-pulse" />
+                <div key={i} className="rounded-2xl border border-border bg-white overflow-hidden shadow-sm">
+                  <div className="h-48 bg-muted/50 animate-pulse" />
+                  <div className="p-4 space-y-3">
+                    <div className="h-3 bg-muted rounded animate-pulse w-1/3" />
+                    <div className="h-5 bg-muted rounded animate-pulse" />
                     <div className="h-3 bg-muted rounded w-2/3 animate-pulse" />
                     <div className="h-8 bg-muted rounded animate-pulse" />
+                    <div className="h-9 bg-muted rounded animate-pulse" />
                   </div>
                 </div>
               ))
-            : apiProducts.map((p, i) => {
-                const inCompare = compare.includes(p.id);
-                const inStock = p.status === 'in_stock';
-                const thumb = p.photos?.[0] || HERO_IMG;
-                return (
-                  <div key={p.id} className="group flex flex-col rounded-2xl border border-border bg-card overflow-hidden hover-lift animate-float-up"
-                    style={{ animationDelay: `${i * 0.07}s` }}>
-                    <div className="relative aspect-square bg-secondary overflow-hidden">
-                      <img src={thumb} alt={p.name} className="h-full w-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-500" />
-                      <button onClick={() => toggleCompare(p.id)}
-                        className={`absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${inCompare ? 'bg-primary text-primary-foreground' : 'glass text-foreground hover:text-primary'}`}
-                        title="Сравнить">
-                        <Icon name="GitCompare" size={16} />
-                      </button>
-                      <div className="absolute top-3 left-3">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${inStock ? 'bg-primary/10 text-primary' : 'bg-amber-100 text-amber-700'}`}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${inStock ? 'bg-primary' : 'bg-amber-500'}`} />
-                          {inStock ? 'В наличии' : 'Под заказ'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col flex-1 p-5">
-                      <span className="font-mono-tech text-xs text-muted-foreground">{p.brand}</span>
-                      <h3 className="mt-1 font-bold text-base leading-snug">{p.name}</h3>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{p.reg_name}</p>
-
-                      {p.ru_number && (
-                        <div className="mt-3 flex items-center gap-2 rounded-lg bg-secondary px-2.5 py-1.5">
-                          <Icon name="FileCheck2" size={14} className="text-primary shrink-0" />
-                          <span className="font-mono-tech text-[11px] font-semibold">{p.ru_number}</span>
-                          {p.ru_valid && <span className="font-mono-tech text-[11px] text-muted-foreground ml-auto">до {p.ru_valid}</span>}
-                        </div>
-                      )}
-
-                      <ul className="mt-3 space-y-1">
-                        {p.specs?.slice(0, 3).map(s => (
-                          <li key={s} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Icon name="Check" size={13} className="text-primary shrink-0" /> {s}
-                          </li>
-                        ))}
-                      </ul>
-
-                      <div className="mt-auto pt-4 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-bold">Цена по запросу</span>
-                          <Icon name="Lock" size={14} className="text-muted-foreground" />
-                        </div>
-                        <Link to={`/catalog/${p.id}`}>
-                          <Button variant="outline" className="w-full rounded-xl font-semibold">Подробнее</Button>
-                        </Link>
-                        <Button className="w-full rounded-xl font-semibold" onClick={() => setKpOpen(true)}>
-                          Запросить цену и КП
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+            : apiProducts.map((p, i) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  inCompare={compare.includes(p.id)}
+                  onCompare={() => toggleCompare(p.id)}
+                  onKp={() => setKpOpen(true)}
+                  animationDelay={i * 0.07}
+                />
+              ))
           }
         </div>
       </section>
