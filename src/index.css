@@ -4,35 +4,35 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 160 30% 99%;
+    --foreground: 175 45% 9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 175 45% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 175 45% 9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 158 84% 36%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 158 40% 95%;
+    --secondary-foreground: 175 45% 12%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 160 25% 95%;
+    --muted-foreground: 175 12% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 152 76% 90%;
+    --accent-foreground: 165 60% 18%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 160 25% 90%;
+    --input: 160 25% 90%;
+    --ring: 158 84% 36%;
 
-    --radius: 0.5rem;
+    --radius: 0.85rem;
 
     --sidebar-background: 0 0% 98%;
 
@@ -97,5 +97,101 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: "Manrope", sans-serif;
   }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Unbounded", sans-serif;
+  }
+  .font-mono-tech {
+    font-family: "JetBrains Mono", monospace;
+  }
+  .text-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(158 84% 38%) 0%,
+      hsl(170 80% 45%) 50%,
+      hsl(185 75% 48%) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .bg-mesh {
+    background-color: hsl(160 30% 99%);
+    background-image:
+      radial-gradient(at 0% 0%, hsla(158, 84%, 60%, 0.18) 0px, transparent 50%),
+      radial-gradient(
+        at 90% 10%,
+        hsla(185, 75%, 60%, 0.16) 0px,
+        transparent 50%
+      ),
+      radial-gradient(
+        at 50% 100%,
+        hsla(150, 70%, 70%, 0.12) 0px,
+        transparent 50%
+      );
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsla(158, 40%, 50%, 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, hsla(158, 40%, 50%, 0.06) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+  .glass {
+    background: hsla(0, 0%, 100%, 0.7);
+    backdrop-filter: blur(14px);
+    border: 1px solid hsla(158, 40%, 50%, 0.12);
+  }
+  .glow-green {
+    box-shadow:
+      0 0 0 1px hsla(158, 84%, 40%, 0.1),
+      0 18px 50px -12px hsla(158, 84%, 40%, 0.35);
+  }
+}
+
+@keyframes float-up {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 hsla(158, 84%, 45%, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 14px hsla(158, 84%, 45%, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsla(158, 84%, 45%, 0);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+.animate-float-up {
+  animation: float-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-pulse-ring {
+  animation: pulse-ring 2s infinite;
+}
+.hover-lift {
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-6px);
 }
