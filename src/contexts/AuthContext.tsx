@@ -17,10 +17,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('gc_token');
     if (!token) { setLoading(false); return; }
+
+    const timeout = setTimeout(() => setLoading(false), 5000);
+
     authApi.me()
       .then(setUser)
       .catch(() => { localStorage.removeItem('gc_token'); })
-      .finally(() => setLoading(false));
+      .finally(() => { clearTimeout(timeout); setLoading(false); });
   }, []);
 
   const login = async (email: string, password: string) => {

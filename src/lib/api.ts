@@ -26,15 +26,15 @@ async function req<T>(url: string, options?: RequestInit): Promise<T> {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 export const authApi = {
   login: (email: string, password: string) =>
-    req<{ token: string; user: AdminUser }>(`${URLS.auth}/login`, {
+    req<{ token: string; user: AdminUser }>(`${URLS.auth}?action=login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     }),
-  me: () => req<AdminUser>(`${URLS.auth}/me`, { headers: authHeaders() }),
-  logout: () => req(`${URLS.auth}/logout`, { method: 'POST', headers: authHeaders() }),
+  me: () => req<AdminUser>(`${URLS.auth}?action=me`, { headers: authHeaders() }),
+  logout: () => req(`${URLS.auth}?action=logout`, { method: 'POST', headers: authHeaders() }),
   changePassword: (old_password: string, new_password: string) =>
-    req<{ ok: boolean; message: string }>(`${URLS.auth}/change-password`, {
+    req<{ ok: boolean; message: string }>(`${URLS.auth}?action=change-password`, {
       method: 'PUT',
       headers: authHeaders(),
       body: JSON.stringify({ old_password, new_password }),

@@ -1,7 +1,6 @@
 """
-Авторизация: login, logout, me, change-password.
-Безопасность: bcrypt, brute-force защита (5 попыток → блокировка 15 мин),
-токен 96 hex символов, срок жизни сессии 30 дней.
+Авторизация: action=login/logout/me/change-password через query ?action=...
+Безопасность: bcrypt, brute-force (5 попыток → блокировка 15 мин), токен 96 hex.
 """
 import json
 import os
@@ -31,7 +30,6 @@ def extract_token(event: dict) -> str:
 
 
 def get_session_user(cur, token: str):
-    """Возвращает dict пользователя по токену или None."""
     if not token:
         return None
     cur.execute(
@@ -42,13 +40,10 @@ def get_session_user(cur, token: str):
         (token,)
     )
     row = cur.fetchone()
-    if not row:
-        return None
-    return {'id': row[0], 'name': row[1], 'email': row[2], 'role': row[3]}
+    return {'id': row[0], 'name': row[1], 'email': row[2], 'role': row[3]} if row else None
 
 
 def check_password(plain: str, hashed: str) -> bool:
-    """Поддерживает как bcrypt, так и legacy SHA-256 хэши."""
     if hashed.startswith('$2b$') or hashed.startswith('$2a$'):
         try:
             return bcrypt.checkpw(plain.encode(), hashed.encode())
@@ -70,11 +65,12 @@ def handler(event: dict, context) -> dict:
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
-    path = (event.get('path') or '').rstrip('/')
     method = event.get('httpMethod', 'GET')
+    params = event.get('queryStringParameters') or {}
+    action = params.get('action', '')
 
-    # ── POST /login ──────────────────────────────────────────────────────────
-    if method == 'POST' and path.endswith('/login'):
+    # ── login ─────────────────────────────────────────────────────────────────
+    if action == 'login' and method == 'POST':
         body = json.loads(event.get('body') or '{}')
         email = (body.get('email') or '').strip().lower()
         password = body.get('password') or ''
@@ -84,7 +80,6 @@ def handler(event: dict, context) -> dict:
 
         conn = get_conn()
         cur = conn.cursor()
-
         cur.execute(
             f"""SELECT id, name, email, role, password_hash, is_active,
                        failed_attempts, locked_until
@@ -103,17 +98,13 @@ def handler(event: dict, context) -> dict:
             conn.close()
             return respond(403, {'error': 'Аккаунт деактивирован. Обратитесь к администратору'})
 
-        # Проверка блокировки
         if locked_until:
             cur.execute(f"SELECT locked_until > NOW() FROM {SCHEMA}.users WHERE id = %s", (uid,))
-            still_locked = cur.fetchone()[0]
-            if still_locked:
+            if cur.fetchone()[0]:
                 conn.close()
-                return respond(429, {'error': f'Аккаунт заблокирован из-за многократных неудачных попыток входа. Попробуйте через {LOCKOUT_MINUTES} минут'})
-            else:
-                cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=0, locked_until=NULL WHERE id=%s", (uid,))
+                return respond(429, {'error': f'Аккаунт временно заблокирован из-за многократных неудачных попыток. Попробуйте через {LOCKOUT_MINUTES} минут'})
+            cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=0, locked_until=NULL WHERE id=%s", (uid,))
 
-        # Проверка пароля
         if not check_password(password, pw_hash):
             new_attempts = (failed or 0) + 1
             if new_attempts >= MAX_ATTEMPTS:
@@ -124,17 +115,15 @@ def handler(event: dict, context) -> dict:
                 conn.commit()
                 conn.close()
                 return respond(429, {'error': f'Слишком много неудачных попыток. Аккаунт заблокирован на {LOCKOUT_MINUTES} минут'})
-            else:
-                cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=%s WHERE id=%s", (new_attempts, uid))
-                conn.commit()
-                conn.close()
-                remaining = MAX_ATTEMPTS - new_attempts
-                return respond(401, {'error': f'Неверный email или пароль. Осталось попыток: {remaining}'})
+            cur.execute(f"UPDATE {SCHEMA}.users SET failed_attempts=%s WHERE id=%s", (new_attempts, uid))
+            conn.commit()
+            conn.close()
+            remaining = MAX_ATTEMPTS - new_attempts
+            return respond(401, {'error': f'Неверный email или пароль. Осталось попыток: {remaining}'})
 
-        # Успешный вход
         token = secrets.token_hex(48)
-        ip = (event.get('requestContext') or {}).get('identity', {}).get('sourceIp', '')
-        ua = (event.get('headers') or {}).get('User-Agent', '')[:512]
+        ip = ((event.get('requestContext') or {}).get('identity') or {}).get('sourceIp', '')
+        ua = ((event.get('headers') or {}).get('User-Agent', '') or '')[:512]
 
         cur.execute(
             f"INSERT INTO {SCHEMA}.sessions (user_id, token, ip_address, user_agent) VALUES (%s, %s, %s, %s)",
@@ -144,31 +133,15 @@ def handler(event: dict, context) -> dict:
             f"UPDATE {SCHEMA}.users SET failed_attempts=0, locked_until=NULL, last_login=NOW() WHERE id=%s",
             (uid,)
         )
-        # Если пароль ещё SHA-256 — обновим до bcrypt
         if not (pw_hash.startswith('$2b$') or pw_hash.startswith('$2a$')):
-            new_hash = hash_password(password)
-            cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (new_hash, uid))
+            cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (hash_password(password), uid))
 
         conn.commit()
         conn.close()
-        return respond(200, {
-            'token': token,
-            'user': {'id': uid, 'name': name, 'email': u_email, 'role': role}
-        })
+        return respond(200, {'token': token, 'user': {'id': uid, 'name': name, 'email': u_email, 'role': role}})
 
-    # ── POST /logout ──────────────────────────────────────────────────────────
-    if method == 'POST' and path.endswith('/logout'):
-        token = extract_token(event)
-        if token:
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute(f"UPDATE {SCHEMA}.sessions SET expires_at=NOW() WHERE token=%s", (token,))
-            conn.commit()
-            conn.close()
-        return respond(200, {'ok': True})
-
-    # ── GET /me ───────────────────────────────────────────────────────────────
-    if method == 'GET' and path.endswith('/me'):
+    # ── me ────────────────────────────────────────────────────────────────────
+    if action == 'me' and method == 'GET':
         token = extract_token(event)
         if not token:
             return respond(401, {'error': 'Не авторизован'})
@@ -180,19 +153,29 @@ def handler(event: dict, context) -> dict:
             return respond(401, {'error': 'Сессия истекла или недействительна'})
         return respond(200, user)
 
-    # ── PUT /change-password ──────────────────────────────────────────────────
-    if method == 'PUT' and path.endswith('/change-password'):
+    # ── logout ────────────────────────────────────────────────────────────────
+    if action == 'logout' and method == 'POST':
+        token = extract_token(event)
+        if token:
+            conn = get_conn()
+            cur = conn.cursor()
+            cur.execute(f"UPDATE {SCHEMA}.sessions SET expires_at=NOW() WHERE token=%s", (token,))
+            conn.commit()
+            conn.close()
+        return respond(200, {'ok': True})
+
+    # ── change-password ───────────────────────────────────────────────────────
+    if action == 'change-password' and method == 'PUT':
         token = extract_token(event)
         if not token:
             return respond(401, {'error': 'Не авторизован'})
         body = json.loads(event.get('body') or '{}')
         old_pw = body.get('old_password') or ''
         new_pw = body.get('new_password') or ''
-
         if not old_pw or not new_pw:
             return respond(400, {'error': 'Укажите старый и новый пароль'})
         if len(new_pw) < 8:
-            return respond(400, {'error': 'Новый пароль должен содержать минимум 8 символов'})
+            return respond(400, {'error': 'Пароль минимум 8 символов'})
 
         conn = get_conn()
         cur = conn.cursor()
@@ -207,9 +190,7 @@ def handler(event: dict, context) -> dict:
             conn.close()
             return respond(400, {'error': 'Текущий пароль введён неверно'})
 
-        new_hash = hash_password(new_pw)
-        cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (new_hash, user['id']))
-        # Инвалидируем все остальные сессии
+        cur.execute(f"UPDATE {SCHEMA}.users SET password_hash=%s WHERE id=%s", (hash_password(new_pw), user['id']))
         cur.execute(f"UPDATE {SCHEMA}.sessions SET expires_at=NOW() WHERE user_id=%s AND token!=%s", (user['id'], token))
         conn.commit()
         conn.close()
