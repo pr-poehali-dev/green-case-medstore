@@ -7,7 +7,7 @@ import Icon from '@/components/ui/icon';
 import ShopLayout from '@/components/shop/ShopLayout';
 import KpModal from '@/components/shop/KpModal';
 import ProductCard from '@/components/shop/ProductCard';
-import { CATEGORIES, ADVANTAGES } from '@/data/shop';
+import { CATEGORIES, ADVANTAGES, HERO_IMG } from '@/data/shop';
 import { productsApi, Product } from '@/lib/api';
 
 export default function Index() {
