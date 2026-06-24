@@ -16,7 +16,7 @@
       },
       "expectedStatus": 201,
       "expectedBody": {"id": 1},
-      "bodyMatcher": "exists"
+      "bodyMatcher": "partial"
     },
     {
       "name": "Get leads without auth — 403",

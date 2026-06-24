@@ -49,6 +49,11 @@ export default function DealsDrawer({ client, onClose }: Props) {
     setDeals(prev => prev.map(d => d.id === updated.id ? { ...d, ...updated } : d));
   };
 
+  const handleDealDeleted = (dealId: number) => {
+    setDeals(prev => prev.filter(d => d.id !== dealId));
+    setSelectedDeal(null);
+  };
+
   const activeDeals = deals.filter(d => d.status === 'active');
   const otherDeals = deals.filter(d => d.status !== 'active');
 
@@ -167,6 +172,7 @@ export default function DealsDrawer({ client, onClose }: Props) {
           deal={selectedDeal}
           onClose={() => setSelectedDeal(null)}
           onUpdated={handleDealUpdated}
+          onDeleted={handleDealDeleted}
         />
       )}
     </>

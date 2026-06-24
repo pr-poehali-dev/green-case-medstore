@@ -102,6 +102,8 @@ export const clientsApi = {
     req<{ id: number }>(`${URLS.clients}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) }),
   update: (data: Partial<Client> & { id: number }) =>
     req<{ ok: boolean }>(`${URLS.clients}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+  remove: (id: number) =>
+    req<{ ok: boolean }>(`${URLS.clients}?id=${id}`, { method: 'DELETE', headers: authHeaders() }),
 };
 
 // ── Deals ─────────────────────────────────────────────────────────────────────
@@ -112,16 +114,18 @@ export const dealsApi = {
     req<{ id: number }>(`${URLS.deals}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) }),
   update: (data: { id: number; title?: string; description?: string; status?: string }) =>
     req<{ ok: boolean }>(`${URLS.deals}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+  remove: (id: number) =>
+    req<{ ok: boolean }>(`${URLS.deals}?id=${id}`, { method: 'DELETE', headers: authHeaders() }),
   getStages: (deal_id: number) =>
-    req<DealStage[]>(`${URLS.deals}/stages?deal_id=${deal_id}`, { headers: authHeaders() }),
+    req<DealStage[]>(`${URLS.deals}?resource=stages&deal_id=${deal_id}`, { headers: authHeaders() }),
   addStage: (deal_id: number, title: string) =>
-    req<DealStage>(`${URLS.deals}/stages`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ deal_id, title }) }),
+    req<DealStage>(`${URLS.deals}?resource=stages`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ deal_id, title }) }),
   updateStage: (data: { id: number; action?: 'take' | 'complete' | 'reopen'; title?: string }) =>
-    req<DealStage>(`${URLS.deals}/stages`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+    req<DealStage>(`${URLS.deals}?resource=stages`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
   getComments: (stage_id: number) =>
-    req<DealComment[]>(`${URLS.deals}/comments?stage_id=${stage_id}`, { headers: authHeaders() }),
+    req<DealComment[]>(`${URLS.deals}?resource=comments&stage_id=${stage_id}`, { headers: authHeaders() }),
   addComment: (stage_id: number, text: string) =>
-    req<DealComment>(`${URLS.deals}/comments`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ stage_id, text }) }),
+    req<DealComment>(`${URLS.deals}?resource=comments`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ stage_id, text }) }),
 };
 
 // ── Content ───────────────────────────────────────────────────────────────────

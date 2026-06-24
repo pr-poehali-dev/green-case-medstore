@@ -1,20 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import Icon from '@/components/ui/icon';
 import { dealsApi, Deal, DealStage, DealComment } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Props {
   deal: Deal;
   onClose: () => void;
   onUpdated: (deal: Deal) => void;
+  onDeleted: (dealId: number) => void;
 }
 
 const STAGE_STATUS: Record<DealStage['status'], { label: string; color: string; icon: string }> = {
-  pending:  { label: 'Ожидает',    color: 'bg-slate-100 text-slate-600',   icon: 'Clock' },
-  in_work:  { label: 'В работе',   color: 'bg-blue-100 text-blue-700',     icon: 'PlayCircle' },
-  done:     { label: 'Завершён',   color: 'bg-emerald-100 text-emerald-700', icon: 'CheckCircle2' },
+  pending: { label: 'Ожидает',  color: 'bg-slate-100 text-slate-600',     icon: 'Clock' },
+  in_work: { label: 'В работе', color: 'bg-blue-100 text-blue-700',       icon: 'PlayCircle' },
+  done:    { label: 'Завершён', color: 'bg-emerald-100 text-emerald-700', icon: 'CheckCircle2' },
+};
+
+const DEAL_STATUS_CFG: Record<Deal['status'], { label: string; color: string }> = {
+  active:    { label: 'Активна',   color: 'bg-blue-100 text-blue-700' },
+  completed: { label: 'Завершена', color: 'bg-emerald-100 text-emerald-700' },
+  cancelled: { label: 'Отменена',  color: 'bg-rose-100 text-rose-700' },
 };
 
 function fmtDate(s: string | null) {
@@ -22,10 +29,9 @@ function fmtDate(s: string | null) {
   return new Date(s).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function StageCard({ stage, onAction, onRefresh }: {
+function StageCard({ stage, onAction }: {
   stage: DealStage;
   onAction: (id: number, action: 'take' | 'complete' | 'reopen') => Promise<void>;
-  onRefresh: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [comments, setComments] = useState<DealComment[]>([]);
@@ -36,7 +42,7 @@ function StageCard({ stage, onAction, onRefresh }: {
 
   const loadComments = async () => {
     if (commentsLoaded) return;
-    const list = await dealsApi.getComments(stage.id).catch(() => []);
+    const list = await dealsApi.getComments(stage.id).catch(() => [] as DealComment[]);
     setComments(list);
     setCommentsLoaded(true);
   };
@@ -48,18 +54,23 @@ function StageCard({ stage, onAction, onRefresh }: {
 
   const handleAction = async (action: 'take' | 'complete' | 'reopen') => {
     setActing(true);
-    await onAction(stage.id, action);
-    setActing(false);
-    onRefresh();
+    try {
+      await onAction(stage.id, action);
+    } finally {
+      setActing(false);
+    }
   };
 
   const handleComment = async () => {
     if (!newComment.trim()) return;
     setPosting(true);
-    const c = await dealsApi.addComment(stage.id, newComment.trim());
-    setComments(prev => [...prev, c]);
-    setNewComment('');
-    setPosting(false);
+    try {
+      const c = await dealsApi.addComment(stage.id, newComment.trim());
+      setComments(prev => [...prev, c]);
+      setNewComment('');
+    } finally {
+      setPosting(false);
+    }
   };
 
   const st = STAGE_STATUS[stage.status];
@@ -85,17 +96,20 @@ function StageCard({ stage, onAction, onRefresh }: {
         <div className="flex items-center gap-1.5 shrink-0">
           {stage.status === 'pending' && (
             <Button size="sm" variant="outline" className="h-7 rounded-lg px-2.5 text-xs" disabled={acting} onClick={() => handleAction('take')}>
-              <Icon name="Play" size={12} className="mr-1" /> В работу
+              {acting ? <Icon name="Loader2" size={12} className="animate-spin mr-1" /> : <Icon name="Play" size={12} className="mr-1" />}
+              В работу
             </Button>
           )}
           {stage.status === 'in_work' && (
             <Button size="sm" className="h-7 rounded-lg px-2.5 text-xs" disabled={acting} onClick={() => handleAction('complete')}>
-              <Icon name="Check" size={12} className="mr-1" /> Завершить
+              {acting ? <Icon name="Loader2" size={12} className="animate-spin mr-1" /> : <Icon name="Check" size={12} className="mr-1" />}
+              Завершить
             </Button>
           )}
           {stage.status === 'done' && (
             <Button size="sm" variant="outline" className="h-7 rounded-lg px-2.5 text-xs" disabled={acting} onClick={() => handleAction('reopen')}>
-              <Icon name="RotateCcw" size={12} className="mr-1" /> Возобновить
+              {acting ? <Icon name="Loader2" size={12} className="animate-spin mr-1" /> : <Icon name="RotateCcw" size={12} className="mr-1" />}
+              Возобновить
             </Button>
           )}
           <button onClick={toggleExpand} className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-secondary transition-colors">
@@ -146,7 +160,8 @@ function StageCard({ stage, onAction, onRefresh }: {
   );
 }
 
-export default function DealModal({ deal, onClose, onUpdated }: Props) {
+export default function DealModal({ deal, onClose, onUpdated, onDeleted }: Props) {
+  const { user } = useAuth();
   const [stages, setStages] = useState<DealStage[]>([]);
   const [loadingStages, setLoadingStages] = useState(true);
   const [newStageTitle, setNewStageTitle] = useState('');
@@ -154,14 +169,14 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
   const [showAddStage, setShowAddStage] = useState(false);
   const [dealStatus, setDealStatus] = useState(deal.status);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const isPrivileged = user?.role === 'developer' || user?.role === 'admin';
 
   useEffect(() => {
     dealsApi.getStages(deal.id).then(setStages).finally(() => setLoadingStages(false));
   }, [deal.id]);
-
-  const refreshStages = () => {
-    dealsApi.getStages(deal.id).then(setStages);
-  };
 
   const handleStageAction = async (id: number, action: 'take' | 'complete' | 'reopen') => {
     const updated = await dealsApi.updateStage({ id, action });
@@ -171,29 +186,39 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
   const handleAddStage = async () => {
     if (!newStageTitle.trim()) return;
     setAddingStage(true);
-    const stage = await dealsApi.addStage(deal.id, newStageTitle.trim());
-    setStages(prev => [...prev, stage]);
-    setNewStageTitle('');
-    setShowAddStage(false);
-    setAddingStage(false);
+    try {
+      const stage = await dealsApi.addStage(deal.id, newStageTitle.trim());
+      setStages(prev => [...prev, stage]);
+      setNewStageTitle('');
+      setShowAddStage(false);
+    } finally {
+      setAddingStage(false);
+    }
   };
 
   const handleDealStatus = async (status: Deal['status']) => {
     setUpdatingStatus(true);
-    await dealsApi.update({ id: deal.id, status });
-    setDealStatus(status);
-    onUpdated({ ...deal, status });
-    setUpdatingStatus(false);
+    try {
+      await dealsApi.update({ id: deal.id, status });
+      setDealStatus(status);
+      onUpdated({ ...deal, status });
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await dealsApi.remove(deal.id);
+      onDeleted(deal.id);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const doneCount = stages.filter(s => s.status === 'done').length;
   const progress = stages.length > 0 ? Math.round((doneCount / stages.length) * 100) : 0;
-
-  const DEAL_STATUS_CONFIG: Record<Deal['status'], { label: string; color: string }> = {
-    active:    { label: 'Активна',   color: 'bg-blue-100 text-blue-700' },
-    completed: { label: 'Завершена', color: 'bg-emerald-100 text-emerald-700' },
-    cancelled: { label: 'Отменена',  color: 'bg-rose-100 text-rose-700' },
-  };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-start justify-end">
@@ -206,9 +231,29 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
             <h2 className="font-display text-lg font-bold leading-tight">{deal.title}</h2>
             {deal.description && <p className="text-sm text-muted-foreground mt-1">{deal.description}</p>}
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg hover:bg-secondary">
-            <Icon name="X" size={18} />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            {isPrivileged && (
+              confirmDelete ? (
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-rose-600 font-medium">Удалить?</span>
+                  <button onClick={handleDelete} disabled={deleting}
+                    className="flex h-8 items-center px-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-semibold">
+                    {deleting ? <Icon name="Loader2" size={13} className="animate-spin" /> : 'Да'}
+                  </button>
+                  <button onClick={() => setConfirmDelete(false)} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary text-muted-foreground text-xs font-semibold">
+                    Нет
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors" title="Удалить сделку">
+                  <Icon name="Trash2" size={15} />
+                </button>
+              )
+            )}
+            <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-secondary">
+              <Icon name="X" size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Status + Progress */}
@@ -217,8 +262,8 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
             <span className="text-xs text-muted-foreground">Статус:</span>
             {(['active', 'completed', 'cancelled'] as Deal['status'][]).map(s => (
               <button key={s} disabled={updatingStatus} onClick={() => handleDealStatus(s)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${dealStatus === s ? DEAL_STATUS_CONFIG[s].color + ' ring-2 ring-offset-1 ring-current/30' : 'bg-secondary text-muted-foreground hover:bg-secondary/80'}`}>
-                {DEAL_STATUS_CONFIG[s].label}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${dealStatus === s ? DEAL_STATUS_CFG[s].color + ' ring-2 ring-offset-1 ring-current/30' : 'bg-secondary text-muted-foreground hover:bg-secondary/80'}`}>
+                {DEAL_STATUS_CFG[s].label}
               </button>
             ))}
           </div>
@@ -239,9 +284,10 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
         {/* Stages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="font-bold text-sm">Этапы {stages.length > 0 && <span className="text-muted-foreground font-normal">({stages.length})</span>}</h3>
-            <button onClick={() => setShowAddStage(s => !s)}
-              className="flex items-center gap-1.5 text-xs text-primary hover:underline font-semibold">
+            <h3 className="font-bold text-sm">
+              Этапы {stages.length > 0 && <span className="text-muted-foreground font-normal">({stages.length})</span>}
+            </h3>
+            <button onClick={() => setShowAddStage(s => !s)} className="flex items-center gap-1.5 text-xs text-primary hover:underline font-semibold">
               <Icon name="Plus" size={13} /> Добавить этап
             </button>
           </div>
@@ -277,12 +323,7 @@ export default function DealModal({ deal, onClose, onUpdated }: Props) {
             </div>
           ) : (
             stages.map(stage => (
-              <StageCard
-                key={stage.id}
-                stage={stage}
-                onAction={handleStageAction}
-                onRefresh={refreshStages}
-              />
+              <StageCard key={stage.id} stage={stage} onAction={handleStageAction} />
             ))
           )}
         </div>

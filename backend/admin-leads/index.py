@@ -1,7 +1,8 @@
 """
 CRUD для заявок (leads).
 POST / — публичная форма, без авторизации.
-GET, PUT, POST /history — только admin/manager.
+GET, PUT, POST /history — только admin/manager/developer.
+При смене статуса на 'in_work' — автоматически создаёт клиента (если нет) и сделку.
 """
 import json
 import os
@@ -20,8 +21,8 @@ def get_conn():
 
 
 def get_user(event, conn):
-    auth = event.get('headers', {}).get('X-Authorization', '') or \
-           event.get('headers', {}).get('Authorization', '')
+    auth = (event.get('headers', {}) or {}).get('X-Authorization', '') or \
+           (event.get('headers', {}) or {}).get('Authorization', '')
     token = auth.replace('Bearer ', '').strip()
     if not token:
         return None
@@ -44,6 +45,54 @@ def row_to_lead(row):
         'comment': row[10] or '', 'product': row[11] or '',
         'created_at': str(row[12]), 'updated_at': str(row[13]),
     }
+
+
+def ensure_client_and_deal(cur, lead, user_id):
+    """
+    Находит или создаёт клиента по названию организации,
+    затем создаёт сделку на основе заявки.
+    Возвращает client_id.
+    """
+    org = lead['org']
+    inn = lead['inn'] or ''
+
+    # Ищем клиента по ИНН (приоритет) или по названию
+    if inn:
+        cur.execute(f"SELECT id FROM {SCHEMA}.clients WHERE inn=%s LIMIT 1", (inn,))
+    else:
+        cur.execute(f"SELECT id FROM {SCHEMA}.clients WHERE name=%s LIMIT 1", (org,))
+    row = cur.fetchone()
+
+    if row:
+        client_id = row[0]
+    else:
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.clients (name,inn,type) VALUES (%s,%s,'private') RETURNING id",
+            (org, inn)
+        )
+        client_id = cur.fetchone()[0]
+
+    # Формируем название сделки из типа заявки
+    type_label = {'kp': 'КП', 'tender': 'Тендер', 'consult': 'Консультация'}.get(lead['type'], lead['type'])
+    deal_title = f"{type_label}: {lead['product'] or org}"
+    deal_desc = lead['comment'] or ''
+
+    # Создаём сделку
+    cur.execute(
+        f"""INSERT INTO {SCHEMA}.deals (client_id,title,description,created_by)
+            VALUES (%s,%s,%s,%s) RETURNING id""",
+        (client_id, deal_title, deal_desc, user_id)
+    )
+    deal_id = cur.fetchone()[0]
+
+    # Добавляем начальный этап «Заявка принята в работу»
+    cur.execute(
+        f"""INSERT INTO {SCHEMA}.deal_stages (deal_id,title,status,taken_by,taken_at)
+            VALUES (%s,'Заявка принята в работу','in_work',%s,NOW())""",
+        (deal_id, lead['manager'] or 'Система')
+    )
+
+    return client_id
 
 
 def handler(event: dict, context) -> dict:
@@ -79,7 +128,7 @@ def handler(event: dict, context) -> dict:
         conn.close()
         return {'statusCode': 201, 'headers': CORS, 'body': json.dumps({'id': new_id})}
 
-    # Все остальные методы — только admin/manager
+    # Все остальные методы — только admin/manager/developer
     user = get_user(event, conn)
     if not user or user['role'] not in ('admin', 'manager', 'developer'):
         conn.close()
@@ -138,6 +187,19 @@ def handler(event: dict, context) -> dict:
         fields.append("updated_at=NOW()")
         vals.append(lid)
         cur.execute(f"UPDATE {SCHEMA}.leads SET {', '.join(fields)} WHERE id=%s", vals)
+
+        # Если статус меняется на 'in_work' — создаём клиента и сделку
+        if body.get('status') == 'in_work':
+            cur.execute(
+                f"""SELECT id,type,org,contact,phone,email,inn,amount,status,manager,comment,product,created_at,updated_at
+                    FROM {SCHEMA}.leads WHERE id=%s""",
+                (lid,)
+            )
+            lead_row = cur.fetchone()
+            if lead_row:
+                lead = row_to_lead(lead_row)
+                ensure_client_and_deal(cur, lead, user['id'])
+
         conn.commit()
         conn.close()
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}

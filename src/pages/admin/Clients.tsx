@@ -6,10 +6,12 @@ import Icon from '@/components/ui/icon';
 import { clientsApi, Client } from '@/lib/api';
 import { fmtMoney } from '@/lib/adminData';
 import DealsDrawer from '@/components/admin/DealsDrawer';
+import { useAuth } from '@/contexts/AuthContext';
 
 const EMPTY: Partial<Client> = { name: '', inn: '', kpp: '', type: 'private', discount: 0 };
 
 export default function Clients() {
+  const { user } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -17,6 +19,10 @@ export default function Clients() {
   const [form, setForm] = useState<Partial<Client>>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [dealsClient, setDealsClient] = useState<Client | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  const isPrivileged = user?.role === 'developer' || user?.role === 'admin';
 
   const load = () => {
     setLoading(true);
@@ -36,6 +42,17 @@ export default function Clients() {
       setModal(null);
       load();
     } finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id: number) => {
+    setDeletingId(id);
+    try {
+      await clientsApi.remove(id);
+      setClients(prev => prev.filter(c => c.id !== id));
+      setConfirmDeleteId(null);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -63,9 +80,30 @@ export default function Clients() {
                 <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Icon name={c.type === 'state' ? 'Landmark' : 'Building2'} size={22} />
                 </div>
-                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${c.type === 'state' ? 'bg-blue-100 text-blue-700' : 'bg-primary/10 text-primary'}`}>
-                  {c.type === 'state' ? 'Государственная' : 'Частная'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${c.type === 'state' ? 'bg-blue-100 text-blue-700' : 'bg-primary/10 text-primary'}`}>
+                    {c.type === 'state' ? 'Государственная' : 'Частная'}
+                  </span>
+                  {isPrivileged && (
+                    confirmDeleteId === c.id ? (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleDelete(c.id)} disabled={deletingId === c.id}
+                          className="flex h-7 items-center px-2 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-semibold">
+                          {deletingId === c.id ? <Icon name="Loader2" size={12} className="animate-spin" /> : 'Да'}
+                        </button>
+                        <button onClick={() => setConfirmDeleteId(null)}
+                          className="flex h-7 items-center px-2 rounded-lg bg-secondary text-muted-foreground text-xs font-semibold hover:bg-secondary/80">
+                          Нет
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmDeleteId(c.id)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-rose-50 text-muted-foreground hover:text-rose-600 transition-colors" title="Удалить клиента">
+                        <Icon name="Trash2" size={14} />
+                      </button>
+                    )
+                  )}
+                </div>
               </div>
               <h3 className="mt-3 font-bold text-base leading-snug">{c.name}</h3>
               <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 font-mono-tech text-xs text-muted-foreground">
