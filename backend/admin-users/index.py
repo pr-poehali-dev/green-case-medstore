@@ -69,7 +69,12 @@ def can_manage(actor_role: str, target_role: str) -> bool:
 
 
 def can_assign_role(actor_role: str, new_role: str) -> bool:
-    """Может ли actor назначить роль new_role."""
+    """Может ли actor назначить роль new_role.
+    developer может назначать любую роль (включая developer и admin).
+    admin может назначать роли с уровнем ниже своего (manager/content/accountant).
+    """
+    if actor_role == 'developer':
+        return True
     return ROLE_LEVEL.get(actor_role, 0) > ROLE_LEVEL.get(new_role, 0)
 
 
