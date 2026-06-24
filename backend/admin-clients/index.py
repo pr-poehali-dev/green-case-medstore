@@ -49,7 +49,7 @@ def handler(event: dict, context) -> dict:
     method = event.get('httpMethod', 'GET')
     conn = get_conn()
     user = get_user(event, conn)
-    if not user or user['role'] not in ('admin', 'manager', 'accountant'):
+    if not user or user['role'] not in ('admin', 'manager', 'accountant', 'developer'):
         conn.close()
         return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
 

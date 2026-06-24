@@ -60,7 +60,7 @@ def handler(event: dict, context) -> dict:
         return {'statusCode': 200, 'headers': CORS, 'body': json.dumps([row_to_article(r) for r in rows], ensure_ascii=False)}
 
     user = get_user(event, conn)
-    if not user or user['role'] not in ('admin', 'content'):
+    if not user or user['role'] not in ('admin', 'content', 'developer'):
         conn.close()
         return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
 
