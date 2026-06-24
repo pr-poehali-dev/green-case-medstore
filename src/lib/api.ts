@@ -5,6 +5,7 @@ const URLS = {
   clients:  'https://functions.poehali.dev/f0d2afab-ac86-410b-812b-106a07a3e668',
   content:  'https://functions.poehali.dev/268f72e1-4cfb-4312-8aae-8c7313536c77',
   users:    'https://functions.poehali.dev/14b0c44a-e76e-440b-851f-885e57db09d7',
+  deals:    'https://functions.poehali.dev/8a61fc8b-a4c1-4b59-8bd1-356a53c7c33d',
 };
 
 function getToken(): string {
@@ -101,6 +102,26 @@ export const clientsApi = {
     req<{ id: number }>(`${URLS.clients}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) }),
   update: (data: Partial<Client> & { id: number }) =>
     req<{ ok: boolean }>(`${URLS.clients}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+};
+
+// ── Deals ─────────────────────────────────────────────────────────────────────
+export const dealsApi = {
+  list: (client_id: number) =>
+    req<Deal[]>(`${URLS.deals}?client_id=${client_id}`, { headers: authHeaders() }),
+  create: (data: { client_id: number; title: string; description?: string; stages?: string[] }) =>
+    req<{ id: number }>(`${URLS.deals}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify(data) }),
+  update: (data: { id: number; title?: string; description?: string; status?: string }) =>
+    req<{ ok: boolean }>(`${URLS.deals}`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+  getStages: (deal_id: number) =>
+    req<DealStage[]>(`${URLS.deals}/stages?deal_id=${deal_id}`, { headers: authHeaders() }),
+  addStage: (deal_id: number, title: string) =>
+    req<DealStage>(`${URLS.deals}/stages`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ deal_id, title }) }),
+  updateStage: (data: { id: number; action?: 'take' | 'complete' | 'reopen'; title?: string }) =>
+    req<DealStage>(`${URLS.deals}/stages`, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(data) }),
+  getComments: (stage_id: number) =>
+    req<DealComment[]>(`${URLS.deals}/comments?stage_id=${stage_id}`, { headers: authHeaders() }),
+  addComment: (stage_id: number, text: string) =>
+    req<DealComment>(`${URLS.deals}/comments`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ stage_id, text }) }),
 };
 
 // ── Content ───────────────────────────────────────────────────────────────────
@@ -211,4 +232,36 @@ export interface Article {
   author: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Deal {
+  id: number;
+  client_id: number;
+  title: string;
+  description: string;
+  status: 'active' | 'completed' | 'cancelled';
+  created_at: string;
+  updated_at: string;
+  created_by_name: string;
+  stages_total: number;
+  stages_done: number;
+}
+
+export interface DealStage {
+  id: number;
+  deal_id: number;
+  title: string;
+  status: 'pending' | 'in_work' | 'done';
+  taken_by: string | null;
+  taken_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface DealComment {
+  id: number;
+  stage_id: number;
+  author: string;
+  text: string;
+  created_at: string;
 }

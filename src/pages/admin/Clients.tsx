@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import Icon from '@/components/ui/icon';
 import { clientsApi, Client } from '@/lib/api';
 import { fmtMoney } from '@/lib/adminData';
+import DealsDrawer from '@/components/admin/DealsDrawer';
 
 const EMPTY: Partial<Client> = { name: '', inn: '', kpp: '', type: 'private', discount: 0 };
 
@@ -15,6 +16,7 @@ export default function Clients() {
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [form, setForm] = useState<Partial<Client>>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [dealsClient, setDealsClient] = useState<Client | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -92,13 +94,17 @@ export default function Clients() {
                 <Button variant="outline" className="flex-1 rounded-xl h-9 text-xs" onClick={() => openEdit(c)}>
                   <Icon name="Pencil" size={14} className="mr-1.5" /> Редактировать
                 </Button>
-                <Button variant="outline" className="rounded-xl h-9 w-9 p-0" title="История сделок">
+                <Button variant="outline" className="rounded-xl h-9 w-9 p-0" title="История сделок" onClick={() => setDealsClient(c)}>
                   <Icon name="History" size={15} />
                 </Button>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {dealsClient && (
+        <DealsDrawer client={dealsClient} onClose={() => setDealsClient(null)} />
       )}
 
       {/* Modal */}

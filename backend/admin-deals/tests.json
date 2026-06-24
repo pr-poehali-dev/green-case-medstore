@@ -1,0 +1,10 @@
+{
+  "tests": [
+    {
+      "name": "GET deals without auth — 403",
+      "method": "GET",
+      "path": "/?client_id=1",
+      "expectedStatus": 403
+    }
+  ]
+}
